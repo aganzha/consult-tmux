@@ -22,7 +22,7 @@ Full buffer name is PREFIX + session name + \"*\"."
   :group 'consult-tmux)
 
 (defcustom consult-tmux-format
-  "#{session_name}:#{window_index}.#{pane_index} #{pane_current_path} #{pane_current_command}"
+  "#{session_name} #{pane_current_path}"
   "tmux format string used to list panes."
   :type 'string
   :group 'consult-tmux)
@@ -38,6 +38,21 @@ Used by marginalia and embark to dispatch annotators/actions."
   :type 'symbol
   :group 'consult-tmux)
 
+(defcustom consult-tmux-last-line-width 80
+  "Max width of the last-line column in `consult-tmux' candidates."
+  :type 'integer
+  :group 'consult-tmux)
+
+(defun consult-tmux--last-line (session)
+  "Return the last non-empty line of output in SESSION, truncated."
+  (let* ((out (shell-command-to-string
+               (format "tmux capture-pane -p -t %s 2>/dev/null" session)))
+         (line (or (car (last (split-string out "\n" t))) "")))
+    (if (> (length line) consult-tmux-last-line-width)
+        (concat (substring line 0 (- consult-tmux-last-line-width 3)) "...")
+      line)))
+
+
 (defun consult-tmux--sessions ()
   "Return an alist of (display-string . session-name) for all tmux panes."
   (let ((output (shell-command-to-string
@@ -48,19 +63,18 @@ Used by marginalia and embark to dispatch annotators/actions."
     (delq nil
           (mapcar
            (lambda (line)
-             (when (string-match
-                    (concat "^\\([^:]+\\):\\([0-9]+\\)\\.\\([0-9]+\\) "
-                            "\\(.*\\) \\([^ ]*\\)$")
-                    line)
+             (when (string-match "^\\([^ ]+\\) \\(.*\\)$" line)
                (let* ((session (match-string 1 line))
-                      (win     (match-string 2 line))
-                      (pane    (match-string 3 line))
-                      (path    (match-string 4 line))
-                      (cmd     (match-string 5 line))
-                      (display (format "%s  %s:%s  %s  %s"
-                                       session win pane path cmd)))
+                      (path    (match-string 2 line))
+                      (title   (if (string-match-p "^[0-9]+$" session)
+                                   "unnamed"
+                                 session))
+                      (last    (consult-tmux--last-line session))
+                      (display (format "%-8s  %-30s  %s"
+                                       title path last)))
                  (cons display session))))
            (split-string output "\n" t)))))
+
 
 (defun consult-tmux--buffer-name (session)
   "Return the vterm buffer name for SESSION."
@@ -93,20 +107,6 @@ Used by marginalia and embark to dispatch annotators/actions."
                                        :lookup #'consult--lookup-candidate
                                        :require-match t)))
       (consult-tmux--attach session))))
-
-;;; Marginalia annotator
-(defun consult-tmux--annotate (cand)
-  "Annotate a =consult-tmux' candidate CAND with session details."
-  (when-let ((session (get-text-property 0 'consult--candidate cand)))
-    (propertize (format "  session: %s" session)
-                'face 'marginalia-file-name)))
-
-;;;###autoload
-(with-eval-after-load 'marginalia
-  (add-to-list 'marginalia-annotator-registry
-               (list consult-tmux-category
-                     #'consult-tmux--annotate
-                     'builtin 'none)))
 
 (provide 'consult-tmux)
 ;;; consult-tmux.el ends here
