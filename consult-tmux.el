@@ -82,6 +82,9 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 (defun consult-tmux--attach (session)
   "Attach to SESSION in a dedicated vterm buffer."
+  ;; here is the #number of tnix session extracted as property
+  ;; =consult--candidate=
+  (message "🪛 attach %s intro: %s" session (prin1-to-string session))
   (let* ((bufname (consult-tmux--buffer-name session))
          (buf     (get-buffer bufname)))
     (if (and buf (buffer-live-p buf))
@@ -100,12 +103,17 @@ Used by marginalia and embark to dispatch annotators/actions."
                              (propertize (car s)
                                          'consult--candidate (cdr s)))
                            sessions)))
+    (message "🐪first candidate %s\n. introspect %s\n. property %s"
+             (car cands)
+             (prin1-to-string (car cands))
+             (get-text-property 0 'consult--candidate (car cands)))
     (when-let ((session (consult--read cands
                                        :prompt consult-tmux-prompt
                                        :sort nil
                                        :category consult-tmux-category
                                        :lookup #'consult--lookup-candidate
-                                       :require-match t)))
+                                       :require-match t
+                                       )))
       (consult-tmux--attach session))))
 
 
@@ -119,11 +127,21 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 (defun consult-tmux-rename-session (session)
   "Rename tmux SESSION, then refresh the candidate list."
+  (message "1⛑️____________________> %s intro %s"
+           session
+           (prin1-to-string session))
   (interactive "sSession to rename: ")
-  (let ((new (read-string (format "New name for %s: " session))))
-    (shell-command (format "tmux rename-session -t %s %s"
-                           (shell-quote-argument session)
-                           (shell-quote-argument new)))
+  (let ((new
+         (read-string (format "New name for %s: " session)))
+        (session-num
+         (get-text-property 0 'consult--candidate session)))
+    (message "🦴 execute command %s" (format "tmux rename-session -t %s %s"
+             (shell-quote-argument session-num)
+             (shell-quote-argument new)))
+    (shell-command
+     (format "tmux rename-session -t %s %s"
+             (shell-quote-argument session-num)
+             (shell-quote-argument new)))
     ;; Close the current minibuffer and re-open with fresh candidates.
     (when (bound-and-true-p vertico-exit)
       (vertico-exit))
