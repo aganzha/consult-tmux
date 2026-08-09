@@ -108,5 +108,34 @@ Used by marginalia and embark to dispatch annotators/actions."
                                        :require-match t)))
       (consult-tmux--attach session))))
 
+
+(defvar consult-tmux-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "r" #'consult-tmux-rename-session)
+    map)
+  "Keymap for `consult-tmux' embark actions.")
+
+(message "DEBUG: consult-tmux-map defined = %S" (boundp 'consult-tmux-map))
+
+(defun consult-tmux-rename-session (session)
+  "Rename tmux SESSION, then refresh the candidate list."
+  (interactive "sSession to rename: ")
+  (let ((new (read-string (format "New name for %s: " session))))
+    (shell-command (format "tmux rename-session -t %s %s"
+                           (shell-quote-argument session)
+                           (shell-quote-argument new)))
+    ;; Close the current minibuffer and re-open with fresh candidates.
+    (when (bound-and-true-p vertico-exit)
+      (vertico-exit))
+    (consult-tmux)))
+
+(message "DEBUG: rename-session defined = %S" (fboundp 'consult-tmux-rename-session))
+
+(with-eval-after-load 'embark
+  (add-to-list 'embark-keymap-alist
+               (cons consult-tmux-category 'consult-tmux-map))
+  (message "DEBUG: registered in embark-keymap-alist"))
+
+
 (provide 'consult-tmux)
 ;;; consult-tmux.el ends here
