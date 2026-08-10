@@ -21,7 +21,7 @@ Full buffer name is PREFIX + session name + \"*\"."
   :type 'string
   :group 'consult-tmux)
 
-(defcustom consult-tmux-prompt "tmux session: "
+(defcustom consult-tmux-prompt "tmux window: "
   "Minibuffer prompt."
   :type 'string
   :group 'consult-tmux)
@@ -39,7 +39,6 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 (defun consult-tmux--last-line (session)
   "Return the last non-empty line of output in SESSION, truncated."
-  (message "💊 thats session to get last cmd %s" session)
   (let* ((out (shell-command-to-string
                (format "tmux capture-pane -p -t %s 2>/dev/null" session)))
          (line (or (car (last (split-string out "\n" t))) "")))
@@ -72,15 +71,12 @@ Used by marginalia and embark to dispatch annotators/actions."
                  (cons display (cons target wname)))))
            (split-string output "\n" t)))))
 
-(defun consult-tmux--buffer-name (session)
-  "Return the vterm buffer name for SESSION."
-  (format "%s%s*" consult-tmux-buffer-prefix session))
+(defun consult-tmux--buffer-name (tmux-window-name)
+  "Return the vterm buffer name for tmux window."
+  (format "%s%s*" consult-tmux-buffer-prefix tmux-window-name))
 
 (defun consult-tmux--attach (tmux-window)
   "Attach to SESSION in a dedicated vterm buffer."
-  ;; here is the #number of tnix session extracted as property
-  ;; =consult--candidate=
-  (message "🪛 attach %s intro: %s" tmux-window (prin1-to-string tmux-window))
   (let* ((bufname (consult-tmux--buffer-name (cdr tmux-window)))
          (buf     (get-buffer bufname)))
     (if (and buf (buffer-live-p buf))
@@ -90,23 +86,28 @@ Used by marginalia and embark to dispatch annotators/actions."
       (with-current-buffer bufname
         (vterm-send-string (format "tmux attach -t %s\n" (car tmux-window)))))))
 
+(defun consult-tmux--state ()
+  "Preview the vterm buffer for the selected tmux window, if it exists."
+  (let ((preview (consult--buffer-preview)))
+    (lambda (action cand)
+      (if cand
+      (let* ((buffer-name (consult-tmux--buffer-name (cdr cand))))
+        (funcall preview action buffer-name))))))
+
 ;;;###autoload
 (defun consult-tmux ()
-  "Select a tmux session and attach to it in a vterm buffer."
+  "Select a tmux window and attach to it in a vterm buffer."
   (interactive)
   (let* ((sessions (consult-tmux--windows))
          (cands    (mapcar (lambda (s)
                              (propertize (car s)
                                          'consult--candidate (cdr s)))
                            sessions)))
-    (message "🐪first candidate %s\n. introspect %s\n. property %s"
-             (car cands)
-             (prin1-to-string (car cands))
-             (get-text-property 0 'consult--candidate (car cands)))
     (when-let ((tmux-window (consult--read cands
                                        :prompt consult-tmux-prompt
                                        :sort nil
                                        :category consult-tmux-category
+                                       :state (consult-tmux--state)
                                        :lookup #'consult--lookup-candidate
                                        :require-match t
                                        )))
@@ -119,37 +120,29 @@ Used by marginalia and embark to dispatch annotators/actions."
     map)
   "Keymap for `consult-tmux' embark actions.")
 
-(message "DEBUG: consult-tmux-map defined = %S" (boundp 'consult-tmux-map))
 
 (defun consult-tmux-rename-window (target)
   "Rename the tmux window TARGET, then refresh the candidate list.
 
 TARGET is the full tmux target 'session:window'."
-  (message "🎯 target to rename %s vs %s" target (get-text-property 0 'consult--candidate target))
   (interactive "sWindow to rename: ")
   (let ((new (read-string (format "New name for %s: " target))))
     (shell-command
      (format "tmux rename-window -t %s %s"
              (shell-quote-argument (get-text-property 0 'consult--candidate target))
              (shell-quote-argument new)))
-    ;; Close the current minibuffer and re-open with fresh candidates.
     (when (bound-and-true-p vertico-exit)
       (vertico-exit))
     (consult-tmux)))
 
+
 (defun consult-tmux-rename-session (session)
   "Rename tmux SESSION, then refresh the candidate list."
-  (message "1⛑️____________________> %s intro %s"
-           session
-           (prin1-to-string session))
   (interactive "sSession to rename: ")
   (let ((new
          (read-string (format "New name for %s: " session)))
         (session-num
          (get-text-property 0 'consult--candidate session)))
-    (message "🦴 execute command %s" (format "tmux rename-session -t %s %s"
-             (shell-quote-argument session-num)
-             (shell-quote-argument new)))
     (shell-command
      (format "tmux rename-session -t %s %s"
              (shell-quote-argument session-num)
