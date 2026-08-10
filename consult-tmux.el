@@ -69,26 +69,26 @@ Used by marginalia and embark to dispatch annotators/actions."
                       (last    (consult-tmux--last-line target))
                       (display (format "%-8s  %-30s  %s"
                                        wname path last)))
-                 (cons display target))))
+                 (cons display (cons target wname)))))
            (split-string output "\n" t)))))
 
 (defun consult-tmux--buffer-name (session)
   "Return the vterm buffer name for SESSION."
   (format "%s%s*" consult-tmux-buffer-prefix session))
 
-(defun consult-tmux--attach (session)
+(defun consult-tmux--attach (tmux-window)
   "Attach to SESSION in a dedicated vterm buffer."
   ;; here is the #number of tnix session extracted as property
   ;; =consult--candidate=
-  (message "🪛 attach %s intro: %s" session (prin1-to-string session))
-  (let* ((bufname (consult-tmux--buffer-name session))
+  (message "🪛 attach %s intro: %s" tmux-window (prin1-to-string tmux-window))
+  (let* ((bufname (consult-tmux--buffer-name (cdr tmux-window)))
          (buf     (get-buffer bufname)))
     (if (and buf (buffer-live-p buf))
         (switch-to-buffer buf)
       (let ((vterm-buffer-name bufname))
         (vterm bufname))
       (with-current-buffer bufname
-        (vterm-send-string (format "tmux attach -t %s\n" session))))))
+        (vterm-send-string (format "tmux attach -t %s\n" (car tmux-window)))))))
 
 ;;;###autoload
 (defun consult-tmux ()
@@ -103,14 +103,14 @@ Used by marginalia and embark to dispatch annotators/actions."
              (car cands)
              (prin1-to-string (car cands))
              (get-text-property 0 'consult--candidate (car cands)))
-    (when-let ((session (consult--read cands
+    (when-let ((tmux-window (consult--read cands
                                        :prompt consult-tmux-prompt
                                        :sort nil
                                        :category consult-tmux-category
                                        :lookup #'consult--lookup-candidate
                                        :require-match t
                                        )))
-      (consult-tmux--attach session))))
+      (consult-tmux--attach tmux-window))))
 
 
 (defvar consult-tmux-map
@@ -154,7 +154,6 @@ TARGET is the full tmux target 'session:window'."
      (format "tmux rename-session -t %s %s"
              (shell-quote-argument session-num)
              (shell-quote-argument new)))
-    ;; Close the current minibuffer and re-open with fresh candidates.
     (when (bound-and-true-p vertico-exit)
       (vertico-exit))
     (consult-tmux)))
