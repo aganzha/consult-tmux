@@ -115,11 +115,27 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 (defvar consult-tmux-map
   (let ((map (make-sparse-keymap)))
-    (define-key map "r" #'consult-tmux-rename-session)
+    (define-key map "r" #'consult-tmux-rename-window)
     map)
   "Keymap for `consult-tmux' embark actions.")
 
 (message "DEBUG: consult-tmux-map defined = %S" (boundp 'consult-tmux-map))
+
+(defun consult-tmux-rename-window (target)
+  "Rename the tmux window TARGET, then refresh the candidate list.
+
+TARGET is the full tmux target 'session:window'."
+  (message "🎯 target to rename %s vs %s" target (get-text-property 0 'consult--candidate target))
+  (interactive "sWindow to rename: ")
+  (let ((new (read-string (format "New name for %s: " target))))
+    (shell-command
+     (format "tmux rename-window -t %s %s"
+             (shell-quote-argument (get-text-property 0 'consult--candidate target))
+             (shell-quote-argument new)))
+    ;; Close the current minibuffer and re-open with fresh candidates.
+    (when (bound-and-true-p vertico-exit)
+      (vertico-exit))
+    (consult-tmux)))
 
 (defun consult-tmux-rename-session (session)
   "Rename tmux SESSION, then refresh the candidate list."
@@ -143,12 +159,10 @@ Used by marginalia and embark to dispatch annotators/actions."
       (vertico-exit))
     (consult-tmux)))
 
-(message "DEBUG: rename-session defined = %S" (fboundp 'consult-tmux-rename-session))
 
 (with-eval-after-load 'embark
   (add-to-list 'embark-keymap-alist
-               (cons consult-tmux-category 'consult-tmux-map))
-  (message "DEBUG: registered in embark-keymap-alist"))
+               (cons consult-tmux-category 'consult-tmux-map)))
 
 
 (provide 'consult-tmux)
