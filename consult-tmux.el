@@ -21,12 +21,6 @@ Full buffer name is PREFIX + session name + \"*\"."
   :type 'string
   :group 'consult-tmux)
 
-(defcustom consult-tmux-format
-  "#{session_name} #{pane_current_path}"
-  "tmux format string used to list panes."
-  :type 'string
-  :group 'consult-tmux)
-
 (defcustom consult-tmux-prompt "tmux session: "
   "Minibuffer prompt."
   :type 'string
@@ -45,6 +39,7 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 (defun consult-tmux--last-line (session)
   "Return the last non-empty line of output in SESSION, truncated."
+  (message "💊 thats session to get last cmd %s" session)
   (let* ((out (shell-command-to-string
                (format "tmux capture-pane -p -t %s 2>/dev/null" session)))
          (line (or (car (last (split-string out "\n" t))) "")))
@@ -53,28 +48,29 @@ Used by marginalia and embark to dispatch annotators/actions."
       line)))
 
 
-(defun consult-tmux--sessions ()
-  "Return an alist of (display-string . session-name) for all tmux panes."
+(defcustom consult-tmux-format "#{session_name}:#{window_index}:#{window_name}:#{pane_current_path}"
+  "tmux -F format for list-windows.")
+
+(defun consult-tmux--windows ()
+  "Return an alist of (display-string . tmux-target) for all tmux windows."
   (let ((output (shell-command-to-string
-                 (format "tmux list-panes -a -F '%s' 2>/dev/null"
-                         consult-tmux-format))))
+                 "tmux list-windows -a -F '#{session_name}:#{window_index}:#{window_name}:#{pane_current_path}' 2>/dev/null")))
     (when (string-empty-p output)
-      (error "No tmux server running or no sessions found"))
+      (error "No tmux server running or no windows found"))
     (delq nil
           (mapcar
            (lambda (line)
-             (when (string-match "^\\([^ ]+\\) \\(.*\\)$" line)
+             (when (string-match "^\\([^:]*\\):\\([0-9]+\\):\\([^:]*\\):\\(.*\\)$" line)
                (let* ((session (match-string 1 line))
-                      (path    (match-string 2 line))
-                      (title   (if (string-match-p "^[0-9]+$" session)
-                                   "unnamed"
-                                 session))
-                      (last    (consult-tmux--last-line session))
+                      (winidx  (match-string 2 line))
+                      (wname   (match-string 3 line))
+                      (path    (match-string 4 line))
+                      (target  (format "%s:%s" session winidx))
+                      (last    (consult-tmux--last-line target))
                       (display (format "%-8s  %-30s  %s"
-                                       title path last)))
-                 (cons display session))))
+                                       wname path last)))
+                 (cons display target))))
            (split-string output "\n" t)))))
-
 
 (defun consult-tmux--buffer-name (session)
   "Return the vterm buffer name for SESSION."
@@ -98,7 +94,7 @@ Used by marginalia and embark to dispatch annotators/actions."
 (defun consult-tmux ()
   "Select a tmux session and attach to it in a vterm buffer."
   (interactive)
-  (let* ((sessions (consult-tmux--sessions))
+  (let* ((sessions (consult-tmux--windows))
          (cands    (mapcar (lambda (s)
                              (propertize (car s)
                                          'consult--candidate (cdr s)))
