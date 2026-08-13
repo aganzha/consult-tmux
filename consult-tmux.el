@@ -73,7 +73,26 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 
 (defcustom consult-tmux-format "#{session_name}:#{window_index}:#{window_name}:#{pane_current_path}"
-  "tmux -F format for list-windows.")
+  "Format for: tmux -F format for list-windows.")
+
+(defvar consult-tmux--alist nil
+  "Alist of (display-string . (target . window-name)).")
+
+(defun consult-tmux--make-candidate (line)
+  "Return structure suitable to further operation:
+\(display-string . (session:window . window-name)
+by extrating from LINE"
+ (when (string-match "^\\([^:]*\\):\\([0-9]+\\):\\([^:]*\\):\\(.*\\)$" line)
+   (let* ((session (match-string 1 line))
+          (winidx  (match-string 2 line))
+          (wname   (match-string 3 line))
+          (path    (match-string 4 line))
+          (target  (format "%s:%s" session winidx))
+          (last    (consult-tmux--last-line target))
+          (display (format "%-8s  %-30s  %s"
+                           wname path last)))
+     (cons (propertize display 'consult-tmux--target target) (cons target wname))))
+ )
 
 (defun consult-tmux--windows ()
   "Return an alist of (display-string . tmux-target) for all tmux windows."
@@ -83,25 +102,15 @@ Used by marginalia and embark to dispatch annotators/actions."
       (error "No tmux server running or no windows found"))
     (delq nil
           (mapcar
-           (lambda (line)
-             (when (string-match "^\\([^:]*\\):\\([0-9]+\\):\\([^:]*\\):\\(.*\\)$" line)
-               (let* ((session (match-string 1 line))
-                      (winidx  (match-string 2 line))
-                      (wname   (match-string 3 line))
-                      (path    (match-string 4 line))
-                      (target  (format "%s:%s" session winidx))
-                      (last    (consult-tmux--last-line target))
-                      (display (format "%-8s  %-30s  %s"
-                                       wname path last)))
-                 (cons display (cons target wname)))))
+           #'consult-tmux--make-candidate
            (split-string output "\n" t)))))
 
-(defun consult-tmux--buffer-name (tmux-window-name)
-  "Return the vterm buffer name for tmux window."
+(defun consult-tmux--buffer-name (window-name)
+  "Compose buffer name from WINDOW-NAME."
   (format "%s%s*" consult-tmux-buffer-prefix tmux-window-name))
 
 (defun consult-tmux--attach (tmux-window)
-  "Attach to SESSION in a dedicated vterm buffer."
+  "Attach to TMUX-WINDOW in a dedicated vterm buffer."
   (let* ((bufname (consult-tmux--buffer-name (cdr tmux-window)))
          (buf     (get-buffer bufname)))
     (if (and buf (buffer-live-p buf))
@@ -128,6 +137,7 @@ Used by marginalia and embark to dispatch annotators/actions."
                              (propertize (car s)
                                          'consult--candidate (cdr s)))
                            sessions)))
+    (setq consult-tmux--alist sessions)
     (when-let ((tmux-window (consult--read cands
                                        :prompt consult-tmux-prompt
                                        :sort nil
@@ -151,26 +161,12 @@ Used by marginalia and embark to dispatch annotators/actions."
 
 TARGET is the full tmux target 'session:window'."
   (interactive "sWindow to rename: ")
-  (let ((new (read-string (format "New name for %s: " target))))
+  (let* ((entry (assoc target consult-tmux--alist))
+        (new (read-string (format "New name for %s: " target)))
+        (old (car (cdr entry))))
     (shell-command
      (format "tmux rename-window -t %s %s"
-             (shell-quote-argument (get-text-property 0 'consult--candidate target))
-             (shell-quote-argument new)))
-    (when (bound-and-true-p vertico-exit)
-      (vertico-exit))
-    (consult-tmux)))
-
-
-(defun consult-tmux-rename-session (session)
-  "Rename tmux SESSION, then refresh the candidate list."
-  (interactive "sSession to rename: ")
-  (let ((new
-         (read-string (format "New name for %s: " session)))
-        (session-num
-         (get-text-property 0 'consult--candidate session)))
-    (shell-command
-     (format "tmux rename-session -t %s %s"
-             (shell-quote-argument session-num)
+             (shell-quote-argument old)
              (shell-quote-argument new)))
     (when (bound-and-true-p vertico-exit)
       (vertico-exit))
