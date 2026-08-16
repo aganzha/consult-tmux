@@ -107,7 +107,7 @@ by extrating from LINE"
 
 (defun consult-tmux--buffer-name (window-name)
   "Compose buffer name from WINDOW-NAME."
-  (format "%s%s*" consult-tmux-buffer-prefix tmux-window-name))
+  (format "%s%s*" consult-tmux-buffer-prefix window-name))
 
 (defun consult-tmux--attach (tmux-window)
   "Attach to TMUX-WINDOW in a dedicated vterm buffer."
