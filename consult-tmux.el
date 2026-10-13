@@ -105,13 +105,13 @@ by extrating from LINE"
            #'consult-tmux--make-candidate
            (split-string output "\n" t)))))
 
-(defun consult-tmux--buffer-name (window-name)
+(defun consult-tmux--buffer-name (tmux-window)
   "Compose buffer name from WINDOW-NAME."
-  (format "%s%s*" consult-tmux-buffer-prefix window-name))
+  (format "-*-%s%s tmux:%s-*-" consult-tmux-buffer-prefix (cdr tmux-window) (car tmux-window)))
 
 (defun consult-tmux--attach (tmux-window)
   "Attach to TMUX-WINDOW in a dedicated vterm buffer."
-  (let* ((bufname (consult-tmux--buffer-name (cdr tmux-window)))
+  (let* ((bufname (consult-tmux--buffer-name tmux-window))
          (buf     (get-buffer bufname)))
     (if (and buf (buffer-live-p buf))
         (switch-to-buffer buf)
@@ -125,7 +125,7 @@ by extrating from LINE"
   (let ((preview (consult--buffer-preview)))
     (lambda (action cand)
       (if cand
-      (let* ((buffer-name (consult-tmux--buffer-name (cdr cand))))
+      (let* ((buffer-name (consult-tmux--buffer-name cand)))
         (funcall preview action buffer-name))))))
 
 ;;;###autoload
